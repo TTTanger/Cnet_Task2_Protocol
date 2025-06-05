@@ -7,9 +7,9 @@ def lossy(data: bytes) -> bytes:
     # Use reverse iteration to safely remove elements
     i = len(data_array) - 1
     while i >= 0:
-        if random.random() < 0.2:  
+        if random.random() < 0.05:  # 5% chance to drop a byte
             del data_array[i]
-        elif random.random() < 0.2:  
+        elif random.random() < 0.1:  # 10% chance to flip a bit
             bit_pos = random.randint(0, 7)
             data_array[i] ^= (1 << bit_pos)
         i -= 1
