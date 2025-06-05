@@ -1,6 +1,7 @@
 import socket
 import threading as t
-import random
+from utils.crc import verify_crc
+from utils.hamming import fix_hamming74
 from lossy_channel import lossy
 import protocol
 
@@ -15,12 +16,10 @@ class client:
     def send_packet(self, server_socket):
         while True:
             try:
-                # Generate random sequence number
-                seq_num = random.randint(0, 255)
                 data = input("Enter data to send: ")
                 
                 # Create frame with CRC
-                frame = protocol.Frame.create_frame(data, seq_num)
+                frame = protocol.Frame.create_frame(data)
                 frame_bytes = frame.to_bytes()
                 
                 if frame_bytes is None:
@@ -31,7 +30,7 @@ class client:
                 msg = lossy(frame_bytes)
                 
                 self.socket.sendto(msg, server_socket)
-                print(f"Sent frame with seq_num: {seq_num}, CRC: {format(frame.crc, '04X')}\n")
+                print(f"Sent frame with Data: {format(frame.data_with_hamming,'04X')}, CRC: {format(frame.crc, '04X')}\n")
                 
             except Exception as e:
                 print(f"Error in send_packet: {e}\n")
@@ -49,13 +48,20 @@ class client:
                     continue
                     
                 print(f"Received from {addr}")
+                fixed_data = fix_hamming74(frame.data_with_hamming)
                 
                 # Verify CRC
-                if frame.verify_crc():
+                if verify_crc(frame.data_with_hamming, frame.crc):
                     print(f"Valid frame received:")
-                    print(f"Data: {frame.data}")
-                    print(f"Sequence: {frame.seq_num}")
+                    print(f"Data: {format(frame.data_with_hamming,'04X')}")
                     print(f"CRC: {format(frame.crc, '04X')}\n")
+                    fixed_data = fix_hamming74(frame.data_with_hamming)
+                    
+                    # Check errors and fix them
+                    fixed_data, positions, had_errors = fix_hamming74(frame.data_with_hamming)
+                    if had_errors:
+                        print(f"Errors detected and fixed at positions: {positions}")
+                        print(f"Fixed data: {format(fixed_data,'04X')}\n")
                 else:
                     print(f"Corrupted frame received\n")
                     

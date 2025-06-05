@@ -1,9 +1,9 @@
 import socket
 import threading as t
-import random
-from lossy_channel import lossy
 import protocol
-
+from lossy_channel import lossy
+from utils.hamming import fix_hamming74
+from utils.crc import verify_crc
 class server:
     def __init__(self, host, port):
         self.host = host
@@ -11,6 +11,29 @@ class server:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.bind((host, port))
         print(f"Server started on {host}:{port}")
+
+    def send_packet(self, server_socket):
+        while True:
+            try:
+                data = input("Enter data to send: ")
+                
+                # Create frame with CRC
+                frame = protocol.Frame.create_frame(data)
+                frame_bytes = frame.to_bytes()
+                
+                if frame_bytes is None:
+                    print("Failed to create frame")
+                    continue
+                    
+                # Apply lossy channel
+                msg = lossy(frame_bytes)
+                
+                self.socket.sendto(msg, server_socket)
+                print(f"Sent frame with Data: {format(frame.data_with_hamming,'04X')}, CRC: {format(frame.crc, '04X')}\n")
+                
+            except Exception as e:
+                print(f"Error in send_packet: {e}\n")
+                continue
 
     def receive_packet(self):
         while True:
@@ -26,41 +49,22 @@ class server:
                 print(f"Received from {addr}")
                 
                 # Verify CRC
-                if frame.verify_crc():
+                if verify_crc(frame.data_with_hamming, frame.crc):
                     print(f"Valid frame received:")
-                    print(f"Data: {frame.data}")
-                    print(f"Sequence: {frame.seq_num}")
+                    print(f"Data: {format(frame.data_with_hamming,'04X')}")
                     print(f"CRC: {format(frame.crc, '04X')}\n")
+                    fixed_data = fix_hamming74(frame.data_with_hamming)
+                    
+                    # Check errors and fix them
+                    fixed_data, positions, had_errors = fix_hamming74(frame.data_with_hamming)
+                    if had_errors:
+                        print(f"Errors detected and fixed at positions: {positions}")
+                        print(f"Fixed data: {format(fixed_data,'04X')}\n")
                 else:
                     print(f"Corrupted frame received\n")
                     
             except Exception as e:
                 print(f"Error in receive_packet: {e}\n")
-                continue
-
-    def send_packet(self, server_socket):
-        while True:
-            try:
-                # Generate random sequence number
-                seq_num = random.randint(0, 255)
-                data = input("Enter data to send: ")
-                
-                # Create frame with CRC
-                frame = protocol.Frame.create_frame(data, seq_num)
-                frame_bytes = frame.to_bytes()
-                
-                if frame_bytes is None:
-                    print("Failed to create frame")
-                    continue
-                    
-                # Apply lossy channel
-                msg = lossy(frame_bytes)
-                
-                self.socket.sendto(msg, server_socket)
-                print(f"Sent frame with seq_num: {seq_num}, CRC: {format(frame.crc, '04X')}\n")
-                
-            except Exception as e:
-                print(f"Error in send_packet: {e}\n")
                 continue
 
 if __name__ == "__main__":

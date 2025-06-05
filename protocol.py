@@ -1,70 +1,75 @@
+from utils.hamming import hamming74
+from utils.crc import calc_crc
+
 # Define the frame
 class Frame:
-    def __init__(self, data, seq_num, crc):
-        self.data = data
-        self.seq_num = seq_num
+    def __init__(self, data_with_hamming, crc):
+        self.data_with_hamming = data_with_hamming
         self.crc = crc
 
+    """Create the frame from string data"""
+    @staticmethod
+    def create_frame(bytes_data):
+        # Convert bytes data to binary data
+        binary_data = 0
+        for char in bytes_data:
+            binary_data = binary_data << 8 | ord(char)
+
+        # Calculate hamming
+        data_with_hamming = hamming74(binary_data)
+
+        # Calculate CRC
+        crc = calc_crc(data_with_hamming, 0x8005)
+
+        # Create and return new frame
+        return Frame(data_with_hamming, crc)
+
+    """Before sending, call this method: from the string data to bytes"""
     def to_bytes(self):
-        """Convert frame to bytes for transmission"""
+        """Convert frame data to bytes for transmission
+        Returns: bytes containing encoded data and CRC
+        """
         try:
-            data_bytes = self.data.encode()
-            seq_num_bytes = self.seq_num.to_bytes(1, 'big')
+            # Convert binary data to bytes
+            data_bytes = self.data_with_hamming.to_bytes(
+                (self.data_with_hamming.bit_length() + 7) // 8, 'big'
+            )
+            # Convert CRC to 2 bytes
             crc_bytes = self.crc.to_bytes(2, 'big')
-            return data_bytes + seq_num_bytes + crc_bytes
+            
+            return data_bytes + crc_bytes
+        
         except Exception as e:
             print(f"Error in to_bytes: {e}")
             return None
 
     @staticmethod
     def from_bytes(frame_bytes):
-        """Create frame from received bytes"""
+        """Reconstruct frame from received bytes
+        Args: frame_bytes - received bytes containing data and CRC
+        Returns: Frame object or None if error
+        """
         try:
-            if len(frame_bytes) < 3:  # Check minimum length
+            if len(frame_bytes) < 3:
                 raise ValueError("Frame too short")
             
-            data = frame_bytes[:-3].decode()
-            seq_num = int.from_bytes(frame_bytes[-3:-2], 'big')
-            crc = int.from_bytes(frame_bytes[-2:], 'big')
-            return Frame(data, seq_num, crc)
+            # Split into data and CRC
+            data_bytes = frame_bytes[:-2]
+            crc_bytes = frame_bytes[-2:]
+            
+            # Convert back to integers
+            data_with_hamming = int.from_bytes(data_bytes, 'big')
+            crc = int.from_bytes(crc_bytes, 'big')
+            
+            return Frame(data_with_hamming, crc)
+        
         except Exception as e:
             print(f"Error in from_bytes: {e}")
             return None
-
-    @staticmethod
-    def create_frame(data, seq_num):
-        # Transform the seq_num to bytes
-        seq_num_bytes = seq_num.to_bytes(1, 'big')  
-
-        # Combine the data and seq_num
-        message = data.encode() + seq_num_bytes
-
-        # Calculate CRC
-        crc = Frame.calc_crc(message, 0x8005)
-
-        # Create and return new frame
-        return Frame(data, seq_num, crc)
-
-    @staticmethod
-    def calc_crc(data, polynomial):
-        # Cnit CRC
-        crc = 0xFFFF
-        for byte in data:
-            crc ^= byte << 8
-            for _ in range(8):
-                if crc & 0x8000:
-                    crc = (crc << 1) ^ polynomial
-                else:
-                    crc = (crc << 1)
-                crc &= 0xFFFF 
-        return crc
-
-    def verify_crc(self):
-        """Verify frame integrity using CRC"""
-        message = self.data.encode() + self.seq_num.to_bytes(1, 'big')
-        calculated_crc = self.calc_crc(message, 0x8005)
-
-        if (calculated_crc == self.crc):
-            return True
-        else:
-            return False
+        
+# Test
+if __name__ == "__main__":
+    data = 'Hello world!'
+    frame = Frame.create_frame(data)
+    print(bin(frame.data_with_hamming)[2:])
+    print(bin(frame.crc)[2:])
