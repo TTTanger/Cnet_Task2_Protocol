@@ -1,8 +1,10 @@
 import socket
 import threading as t
-import random
 from lossy_channel import lossy
 import protocol
+
+TIMEOUT = 1.0  # 1s, ACK timeout for retransmission
+MAX_RETRY = 5
 
 class client:
     def __init__(self, host, port):
@@ -10,64 +12,82 @@ class client:
         self.port = port
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.bind((host, port))
+        # Set the timeout for receiving ACKs
+        self.socket.settimeout(TIMEOUT)
         print(f"Client started on {host}:{port}")
 
-    def send_packet(self, server_socket):
+    def send_packet(self, target_socket):
+        # Initialize sequence number
+        seq_num = 0
         while True:
-            try:
-                # Generate random sequence number
-                seq_num = random.randint(0, 255)
-                data = input("Enter data to send: ")
-                
-                # Create frame with CRC
-                frame = protocol.Frame.create_frame(data, seq_num)
-                frame_bytes = frame.to_bytes()
-                
-                if frame_bytes is None:
-                    print("Failed to create frame")
-                    continue
-                    
-                # Apply lossy channel
-                msg = lossy(frame_bytes)
-                
-                self.socket.sendto(msg, server_socket)
-                print(f"Sent frame with seq_num: {seq_num}, CRC: {format(frame.crc, '04X')}\n")
-                
-            except Exception as e:
-                print(f"Error in send_packet: {e}\n")
+            # Reset retries for each new packet
+            retries = 0
+            # Get data to send
+            data = input("Enter data to send: ").encode()
+            if not data:
                 continue
+            while retries < MAX_RETRY:
+                try:
+                    # Create frame
+                    frame = protocol.encode(data, seq_num)
+                    
+                    # Apply lossy channel
+                    msg = lossy(frame)
+                    
+                    # Send the message
+                    self.socket.sendto(msg, target_socket)
+                    print(f"Sending frame, sequence number: {seq_num}, retries: {retries}")
+                    
+                    # Wait for ACK
+                    try:
+                        response, _ = self.socket.recvfrom(1024)
+                        if response == b'ACK' + bytes([seq_num]):
+                            print("Received ACK")
+                            seq_num = (seq_num + 1) % 256  # Sequence number wraps around
+                            break
+
+                        else:
+                            print("Received incorrect ACK, retransmitting")
+                            retries += 1
+                    except socket.timeout:
+                        print("Timeout waiting for ACK, retransmitting")
+                        retries += 1
+
+                except Exception as e:
+                    print(f"Error in send_packet: {e}\n")
+                    continue
+            if retries == MAX_RETRY:
+                print("Retransmission limit reached, sending failed")
 
     def receive_packet(self):
         while True:
             try:
-                data, addr = self.socket.recvfrom(1024)
-                
-                # Reconstruct frame from received bytes
-                frame = protocol.Frame.from_bytes(data)
-                if frame is None:
-                    print("Failed to reconstruct frame")
-                    continue
-                    
-                print(f"Received from {addr}")
-                
-                # Verify CRC
-                if frame.verify_crc():
-                    print(f"Valid frame received:")
-                    print(f"Data: {frame.data}")
-                    print(f"Sequence: {frame.seq_num}")
-                    print(f"CRC: {format(frame.crc, '04X')}\n")
-                else:
-                    print(f"Corrupted frame received\n")
-                    
+                frame, addr = self.socket.recvfrom(1024)
+            except socket.timeout:
+                continue # Ignore timeout exceptions and continue waiting for packets
             except Exception as e:
-                print(f"Error in receive_packet: {e}\n")
+                print(f"Error in receive_packet: {e}")
+                continue
+            print(f"Received the frame. Length is {len(frame)} bytes from {addr}")
+
+            # Decode the frame
+            data, seq_num, has_error = protocol.decode(frame)
+
+            if has_error:
+                print("Failed to decode the frame, error detected.")
                 continue
 
+            print(f"Successfully decoded the frame. Sequence number is: {seq_num}")
+            print(f"Original data: {data.decode(errors='replace')}")
+
+            # Send ACK
+            self.socket.sendto(b'ACK' + bytes([seq_num]), addr)
+            print("ACK sent")
 
 if __name__ == "__main__":
-    client = client("127.0.0.1", 65432)
+    client_object = client("127.0.0.1", 65432)
     server_addr = ("127.0.0.1", 65433)
-    t1 = t.Thread(target=client.send_packet, args=(server_addr,))
-    t2 = t.Thread(target=client.receive_packet)
+    t1 = t.Thread(target=client_object.send_packet, args=(server_addr,))
+    t2 = t.Thread(target=client_object.receive_packet)
     t1.start()
     t2.start()
