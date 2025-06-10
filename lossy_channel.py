@@ -14,7 +14,7 @@ def lossy(data: bytes) -> bytes:
             data_array[i] ^= (1 << bit_pos)
         i -= 1
     
-    return bytes(data_array)
+    return bytes(data_array)    # Return: bytes
 
 if __name__ == "__main__":
     # Test with binary data
