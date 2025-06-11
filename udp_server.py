@@ -1,6 +1,7 @@
 import socket               
 import threading
 from lossy_channel import lossy
+from protocol import Frame
 
 class server:
     def __init__(self, host, port):
@@ -11,18 +12,22 @@ class server:
         print("Server started on ", self.host, ":", self.port)
 
     def send(self, message, client):
-        broken_message = lossy(message)
-        self.s.sendto(broken_message, client)
-        print("Message sent: " + broken_message.decode())
+        # TODO: Protocol
+        message = message.encode("ascii")
+        frame = Frame.create_frame(message)
+        lossy_frame = lossy(frame)
+        self.s.sendto(lossy_frame, client)
+        print("Message sent!")
     
     def receive(self):
-        data, addr = self.s.recvfrom(1024)
-        print("Message received: " + data.decode(), "from", addr)
+        frame, addr = self.s.recvfrom(1024)
+        decode_data = Frame.check_frame(frame)
+        print("Message received: " + decode_data.decode("ascii"), "from", addr)
     
     def send_thread(self):
         client = ('127.0.0.1', 65432)
         while True:
-            message = input("Enter message: ").encode('ascii')
+            message = input("Enter message: ")
             self.send(message, client)
     
     def receive_thread(self):
