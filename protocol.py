@@ -23,20 +23,29 @@ class Frame:
     
     @staticmethod
     def check_frame(frame):
-        # Extract data and crc
-        data_with_hamming = frame[:-3]
-        original_len = int.from_bytes(frame[-3:-2], byteorder='big')
-        received_crc = int.from_bytes(frame[-2:], byteorder='big')
+        try:
+            # Extract data and crc
+            data_with_hamming = frame[:-3]
+            original_len = int.from_bytes(frame[-3:-2], byteorder='big')
+            received_crc = int.from_bytes(frame[-2:], byteorder='big')
 
-        # Calculate CRC
-        calculated_crc = calc_crc(data_with_hamming + frame[-3:-2], 0x8005)
+            # First try to decode and fix errors using Hamming code
+            try:
+                decode_data = hamming74_decode(data_with_hamming, original_len)
+            except Exception as e:
+                return b'Hamming decode error'
 
-        # Compare calculated CRC with received CRC
-        if calculated_crc == received_crc:
-            decode_data = hamming74_decode(data_with_hamming, original_len)
-            return decode_data
-        else:
-            return b'CRC error'
+            # After correction, calculate and check CRC
+            calculated_crc = calc_crc(data_with_hamming + original_len.to_bytes(1, byteorder='big'), 0x8005)
+
+            # Compare calculated CRC with received CRC
+            if calculated_crc == received_crc:
+                return decode_data
+            else:
+                return b'CRC error'
+                
+        except Exception as e:
+            return f'Frame check error: {str(e)}'.encode()
     
 # Test
 if __name__ == "__main__":

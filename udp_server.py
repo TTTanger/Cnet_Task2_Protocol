@@ -12,7 +12,6 @@ class server:
         print("Server started on ", self.host, ":", self.port)
 
     def send(self, message, client):
-        # TODO: Protocol
         message = message.encode("ascii")
         frame = Frame.create_frame(message)
         lossy_frame = lossy(frame)

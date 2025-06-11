@@ -12,7 +12,6 @@ class client:
         print("Client started on ", self.host, ":", self.port)
 
     def send(self, message, server):
-        # TODO: Protocol
         frame = Frame.create_frame(message)
         lossy_frame = lossy(frame)
         self.c.sendto(lossy_frame, server)
