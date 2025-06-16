@@ -5,7 +5,10 @@ from utils.crc import calc_crc
 class Frame:
     """Create the frame from string data"""
     @staticmethod
-    def create_frame(data):
+    def create_frame(seq_num, data):
+        # Add sequence number (1 byte)
+        seq_byte = seq_num.to_bytes(1, byteorder='big')
+
         # Calculate hamming
         data_with_hamming, original_len = hamming74_encode(data)
 
@@ -13,19 +16,18 @@ class Frame:
         original_len = original_len.to_bytes(1, byteorder='big')
 
         # Calculate CRC
-        crc = calc_crc(data_with_hamming + original_len, 0x8005)
-
-        # Convert CRC to 2 bytes (16 bits)
+        crc = calc_crc(seq_byte + data_with_hamming + original_len, 0x8005)
         crc_bytes = crc.to_bytes(2, byteorder='big')
         
         # Return combined frame as bytes
-        return data_with_hamming + original_len + crc_bytes
+        return seq_byte + data_with_hamming + original_len + crc_bytes
     
     @staticmethod
     def check_frame(frame):
         try:
-            # Extract data and crc
-            data_with_hamming = frame[:-3]
+            # Extract seq_num, data and crc
+            seq_num = frame[0]
+            data_with_hamming = frame[1:-3]
             original_len = int.from_bytes(frame[-3:-2], byteorder='big')
             received_crc = int.from_bytes(frame[-2:], byteorder='big')
 
@@ -35,22 +37,27 @@ class Frame:
             except Exception as e:
                 return b'Hamming decode error'
 
-            # After correction, calculate and check CRC
-            calculated_crc = calc_crc(data_with_hamming + original_len.to_bytes(1, byteorder='big'), 0x8005)
+            # Recompose the frame for CRC calculation
+            seq_byte = seq_num.to_bytes(1, byteorder='big')
+            original_len_byte = original_len.to_bytes(1, byteorder='big')
+            frame_for_crc = seq_byte + data_with_hamming + original_len_byte
+
+            # Calculate CRC
+            calculated_crc = calc_crc(frame_for_crc, 0x8005)
 
             # Compare calculated CRC with received CRC
             if calculated_crc == received_crc:
-                return decode_data
+                return seq_num, decode_data
             else:
-                return b'CRC error'
+                return None, b'CRC error'
                 
         except Exception as e:
-            return f'Frame check error: {str(e)}'.encode()
+            return None, f'Frame check error: {str(e)}'.encode()
     
 # Test
 if __name__ == "__main__":
     data = b'Hello world!'
-    frame = Frame.create_frame(data)
+    frame = Frame.create_frame(1, data)
     print(f"Frame: {frame.hex()}")
     print(f"Data part: {frame[:-3].hex()}")
     print(f"Length part: {frame[-3:-2].hex()}")
