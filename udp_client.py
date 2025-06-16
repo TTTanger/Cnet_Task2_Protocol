@@ -9,9 +9,9 @@ class client:
         self.port = port
         self.c = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.c.bind((self.host, self.port))
-        self.c.settimeout(1.0)  # 1秒超时
-        self.seq_num = 0  # 当前序列号
-        self.expected_seq = 0  # 期望收到的序列号
+        self.c.settimeout(1.0)  # Set the timeout to 1 second
+        self.seq_num = 0    # Message sequence number set to 0
+        self.expected_seq = 0   # The expected sequence number set to 0
         print("Client started on ", self.host, ":", self.port)
 
     def send(self, message, server):

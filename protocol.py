@@ -9,11 +9,16 @@ class Frame:
         # Add sequence number (1 byte)
         seq_byte = seq_num.to_bytes(1, byteorder='big')
 
-        # Calculate hamming
-        data_with_hamming, original_len = hamming74_encode(data)
+        # Encode data with Hamming74
+        encoded_blocks = []
+        for i in range(0, len(data), 4):
+            block = data[i:i+4]
+            encoded, _ = hamming74_encode(block)
+            encoded_blocks.append(encoded)
+        data_with_hamming = b''.join(encoded_blocks)
 
         # Define the original length
-        original_len = original_len.to_bytes(1, byteorder='big')
+        original_len = len(data).to_bytes(1, byteorder='big')
 
         # Calculate CRC
         crc = calc_crc(seq_byte + data_with_hamming + original_len, 0x8005)
@@ -31,11 +36,18 @@ class Frame:
             original_len = int.from_bytes(frame[-3:-2], byteorder='big')
             received_crc = int.from_bytes(frame[-2:], byteorder='big')
 
-            # First try to decode and fix errors using Hamming code
-            try:
-                decode_data = hamming74_decode(data_with_hamming, original_len)
-            except Exception as e:
-                return b'Hamming decode error'
+            # Decode data with Hamming74
+            decoded = bytearray()
+            bytes_needed = original_len
+            for i in range(0, len(data_with_hamming), 7):
+                block = data_with_hamming[i:i+7]
+                # Decode each block
+                group_len = min(4, bytes_needed - len(decoded))
+                decoded_block = hamming74_decode(block, group_len)
+                decoded.extend(decoded_block)
+                if len(decoded) >= bytes_needed:
+                    break
+            decode_data = bytes(decoded[:original_len])
 
             # Recompose the frame for CRC calculation
             seq_byte = seq_num.to_bytes(1, byteorder='big')
