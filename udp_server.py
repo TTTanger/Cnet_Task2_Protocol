@@ -30,7 +30,7 @@ class server:
                     
                     if ack_data == b'ACK' and ack_seq == self.seq_num:
                         print(f"Received ACK for seq={self.seq_num}")
-                        self.seq_num = 1 - self.seq_num  # 切换序列号(0/1)
+                        self.seq_num = 1 - self.seq_num 
                         return True
                         
                 except socket.timeout:
