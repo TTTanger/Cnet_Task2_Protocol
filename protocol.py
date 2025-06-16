@@ -75,3 +75,4 @@ if __name__ == "__main__":
     print(f"Length part: {frame[-3:-2].hex()}")
     print(f"CRC part: {frame[-2:].hex()}")
     print(f"Decoded data: {Frame.check_frame(frame)}")
+

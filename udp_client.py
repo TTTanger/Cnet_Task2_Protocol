@@ -1,7 +1,11 @@
 import socket
 import threading
+
 from lossy_channel import lossy
 from protocol import Frame
+
+TIMEOUT = 1.0  # 1s, ACK timeout for retransmission
+MAX_RETRY = 5
 
 class client:
     def __init__(self, host, port):
