@@ -1,7 +1,8 @@
 import socket
-import threading as t
+import threading
+
 from lossy_channel import lossy
-import protocol
+from protocol import Frame
 
 TIMEOUT = 1.0  # 1s, ACK timeout for retransmission
 MAX_RETRY = 5
@@ -10,84 +11,83 @@ class client:
     def __init__(self, host, port):
         self.host = host
         self.port = port
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.socket.bind((host, port))
-        # Set the timeout for receiving ACKs
-        self.socket.settimeout(TIMEOUT)
-        print(f"Client started on {host}:{port}")
+        self.c = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.c.bind((self.host, self.port))
+        self.c.settimeout(1.0)  
+        self.seq_num = 0  
+        self.expected_seq = 0  
+        print("Client started on ", self.host, ":", self.port)
 
-    def send_packet(self, target_socket):
-        # Initialize sequence number
-        seq_num = 0
-        while True:
-            # Reset retries for each new packet
-            retries = 0
-            # Get data to send
-            data = input("Enter data to send: ").encode()
-            if not data:
-                continue
-            while retries < MAX_RETRY:
-                try:
-                    # Create frame
-                    frame = protocol.encode(data, seq_num)
-                    
-                    # Apply lossy channel
-                    msg = lossy(frame)
-                    
-                    # Send the message
-                    self.socket.sendto(msg, target_socket)
-                    print(f"Sending frame, sequence number: {seq_num}, retries: {retries}")
-                    
-                    # Wait for ACK
-                    try:
-                        response, _ = self.socket.recvfrom(1024)
-                        if response == b'ACK' + bytes([seq_num]):
-                            print("Received ACK")
-                            seq_num = (seq_num + 1) % 256  # Sequence number wraps around
-                            break
+    def send(self, message, server):
+        max_retries = 3
+        retries = 0
 
-                        else:
-                            print("Received incorrect ACK, retransmitting")
-                            retries += 1
-                    except socket.timeout:
-                        print("Timeout waiting for ACK, retransmitting")
-                        retries += 1
-
-                except Exception as e:
-                    print(f"Error in send_packet: {e}\n")
-                    continue
-            if retries == MAX_RETRY:
-                print("Retransmission limit reached, sending failed")
-
-    def receive_packet(self):
-        while True:
+        while retries < max_retries:
             try:
-                frame, addr = self.socket.recvfrom(1024)
-            except socket.timeout:
-                continue # Ignore timeout exceptions and continue waiting for packets
+                frame = Frame.create_frame(self.seq_num, message)
+                lossy_frame = lossy(frame)
+                self.c.sendto(lossy_frame, server)
+                print(f"Sent frame with seq={self.seq_num}")
+                try:
+                    ack_frame, addr = self.c.recvfrom(1024)
+                    ack_seq, ack_data = Frame.check_frame(ack_frame)
+                    
+                    if ack_data == b'ACK' and ack_seq == self.seq_num:
+                        print(f"Received ACK for seq={self.seq_num}")
+                        self.seq_num = 1 - self.seq_num  
+                        return True
+                        
+                except socket.timeout:
+                    print(f"Timeout, retrying... ({retries + 1})")
+                    retries += 1
+                    continue
+                    
             except Exception as e:
-                print(f"Error in receive_packet: {e}")
-                continue
-            print(f"Received the frame. Length is {len(frame)} bytes from {addr}")
+                print(f"Error: {e}")
+                retries += 1
 
-            # Decode the frame
-            data, seq_num, has_error = protocol.decode(frame)
+        print("Max retries reached!")
+        return False
+    
+    def receive(self):
+        try:
+            frame, addr = self.c.recvfrom(1024)
+            seq_num, decode_data = Frame.check_frame(frame)
+            if seq_num is None:
+                print(f"Frame check failed: {decode_data}")
+                return
+            print(f"Received message", decode_data.decode("ascii"), "from", addr, "with seq={seq_num}")
+            ack = Frame.create_frame(seq_num, b'ACK')
+            self.c.sendto(ack, addr)
 
-            if has_error:
-                print("Failed to decode the frame, error detected.")
-                continue
+            if seq_num == self.expected_seq:
+                print(f"Message: {decode_data.decode('ascii')} from {addr}")
+                self.expected_seq = 1 - self.expected_seq
+            else:
+                print(f"Duplicate message with seq={seq_num}")
 
-            print(f"Successfully decoded the frame. Sequence number is: {seq_num}")
-            print(f"Original data: {data.decode(errors='replace')}")
+        except socket.timeout:
+            # Without printing, skip
+            pass
+        except Exception as e:
+            print(f"Error in receive: {e}")
 
-            # Send ACK
-            self.socket.sendto(b'ACK' + bytes([seq_num]), addr)
-            print("ACK sent")
+    def send_thread(self):
+        server = ('127.0.0.1', 65433)
+        while True:
+            message = input("Enter message: ").encode('ascii')
+            self.send(message, server)
+    
+    def receive_thread(self):
+        while True:
+            self.receive()
 
 if __name__ == "__main__":
-    client_object = client("127.0.0.1", 65432)
-    server_addr = ("127.0.0.1", 65433)
-    t1 = t.Thread(target=client_object.send_packet, args=(server_addr,))
-    t2 = t.Thread(target=client_object.receive_packet)
-    t1.start()
-    t2.start()
+    c = client('127.0.0.1', 65432)
+    
+    # Create and start threads
+    send_thread = threading.Thread(target=c.send_thread)
+    receive_thread = threading.Thread(target=c.receive_thread)
+    
+    send_thread.start()
+    receive_thread.start()
