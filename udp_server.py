@@ -144,7 +144,7 @@ class server:
                 self.s.sendto(ack, addr)
 
                 if seq_num == self.expected_seq:
-                    print(f"Message: {decode_data.decode('ascii')} from {addr}")
+                    print(f"Message: {decode_data.decode('ascii', errors='ignore')} from {addr}")
                     self.expected_seq = 1 - self.expected_seq
                 else:
                     print(f"Duplicate message with seq={seq_num}")
@@ -157,7 +157,7 @@ class server:
     def send_thread(self):
         client = ('127.0.0.1', 65432)
         while True:
-            message = input("Enter message (or 'test_large' for large message test): ").encode('ascii')
+            message = input("Enter message (or 'test_large' for large message test): ").encode('ascii', errors='ignore')
             
             if message == b'test_large':
                 large_message = b'This is a very large test message that will be fragmented into multiple pieces to handle multiple bit errors more effectively. ' * 20

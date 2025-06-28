@@ -78,4 +78,4 @@ if __name__ == '__main__':
     print('Encoded:', encoded)
     decoded_data = hamming74_decode(encoded, original_len)
     print('Decoded:', decoded_data)
-    print('Original:', decoded_data.decode('ascii'))
+    print('Original:', decoded_data.decode('ascii', errors='ignore'))
