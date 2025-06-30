@@ -8,23 +8,25 @@ A Python implementation of a custom reliable protocol built on top of UDP, featu
 
 - **Error Detection**: CRC-16 checksum for frame integrity
 - **Error Correction**: Hamming(7,4) code for single-bit error correction
-- **Message Fragmentation**: Automatic fragmentation for large messages (16-byte fragments)
+- **Message Fragmentation**: Automatic fragmentation for large messages (128-byte fragments)
 - **Reliable Delivery**: Sequence numbers, acknowledgments, and retransmission
 - **Performance Evaluation**: Comprehensive testing and analysis tools
 
 ## Project Structure
 
 ```
-Ex2 SW/
+Cnet_Task2_Protocol/
 ├── protocol.py          # Core protocol implementation
 ├── udp_client.py        # UDP client with reliable protocol
 ├── udp_server.py        # UDP server with reliable protocol
 ├── lossy_channel.py     # Network simulation with errors
-├── evaluate.py          # Protocol evaluation and testing
+├── end_to_end_test.py   # Automated end-to-end protocol test
+├── evaluate_protocol.py # Protocol evaluation and analysis
+├── README.md            # Project documentation
 ├── utils/
-│   ├── crc.py          # CRC-16 implementation
-│   └── hamming.py      # Hamming(7,4) error correction
-└── logs/               # Evaluation logs (auto-created)
+│   ├── crc.py           # CRC-16 implementation
+│   └── hamming.py       # Hamming(7,4) error correction
+└── logs/                # Evaluation and test logs (auto-created)
 ```
 
 ## File Descriptions
@@ -34,7 +36,7 @@ Ex2 SW/
 #### `protocol.py`
 The main protocol implementation containing the `Frame` class that handles:
 - Frame creation with headers, data encoding, and CRC calculation
-- Automatic message fragmentation (16-byte fragments)
+- Automatic message fragmentation (128-byte fragments)
 - Frame validation and error checking
 - Hamming(7,4) encoding/decoding integration
 
@@ -76,7 +78,7 @@ Network simulation module:
 
 ### Evaluation and Testing
 
-#### `evaluate.py`
+#### `evaluate_protocol.py`
 Comprehensive protocol evaluation script that measures:
 
 **Performance Metrics:**
@@ -94,7 +96,7 @@ Comprehensive protocol evaluation script that measures:
 
 **Usage:**
 ```bash
-python evaluate.py
+python evaluate_protocol.py
 ```
 
 **Output:**
@@ -102,6 +104,22 @@ python evaluate.py
 - Detailed log file in `logs/` directory
 - Performance statistics and recommendations
 - Protocol limitation analysis
+
+#### `end_to_end_test.py`
+Automated end-to-end test script:
+- Simulates client-server communication using the full protocol stack
+- Measures success rate, latency, bandwidth, and fragment statistics for various data sizes
+- Tests both Client → Server and Server → Client directions
+- Generates a timestamped log file in `logs/` directory
+
+**Usage:**
+```bash
+python end_to_end_test.py
+```
+
+**Output:**
+- Log file in `logs/` directory (e.g., `end_to_end_test_YYYYMMDD_HHMMSS.log`)
+- Detailed report of protocol performance under simulated lossy conditions
 
 ## Quick Start
 
@@ -121,7 +139,7 @@ python udp_client.py
 
 ### 4. Run Evaluation
 ```bash
-python evaluate.py
+python evaluate_protocol.py
 ```
 
 ## Protocol Specifications
@@ -135,7 +153,7 @@ python evaluate.py
 ```
 
 ### Key Parameters
-- **Fragment Size**: 16 bytes
+- **Fragment Size**: 128 bytes
 - **Timeout**: 1 second
 - **Max Retries**: 10
 - **Sequence Numbers**: 8-bit (0-255)
@@ -183,9 +201,9 @@ The evaluation script provides comprehensive analysis based on real-world testin
 - 2048 bytes: 10.00% success rate
 
 **Fragmentation Efficiency:**
-- 1000 bytes: 63 fragments, 119.10% overhead
-- 2000 bytes: 125 fragments, 118.75% overhead
-- 3000 bytes: 188 fragments, 118.87% overhead
+- 1000 bytes: 8 fragments, 119.10% overhead
+- 2000 bytes: 16 fragments, 118.75% overhead
+- 3000 bytes: 24 fragments, 118.87% overhead
 
 ### Log Files
 - Automatically created in `logs/` directory
@@ -267,3 +285,13 @@ Data size:    256 bytes | Success:  74.00% | CRC errors:  26.00% | Frame errors:
 ## License
 
 This project is for educational purposes and demonstrates reliable protocol implementation over UDP.
+
+## End-to-End Test
+
+To run the automated end-to-end test, execute:
+
+```
+python end_to_end_test.py
+```
+
+All test outputs will be saved in `logs/end_to_end_test.log`.

@@ -4,7 +4,7 @@ import threading
 from lossy_channel import lossy
 from protocol import Frame
 
-TIMEOUT = 1.0  # 1s, ACK timeout for retransmission
+TIMEOUT = 0.00001  # ACK timeout for retransmission
 MAX_RETRY = 10  # Global retry limit
 
 class server:
@@ -105,7 +105,8 @@ class server:
         
         self.fragment_buffers[seq_num][fragment_id] = fragment_data
         
-        ack = Frame.create_frame(seq_num, b'ACK')
+        # Send ACK immediately after receiving a fragment, ACK contains fragment_id
+        ack = Frame.create_frame(seq_num, b'ACK', fragment_id, total_fragments)
         self.s.sendto(ack, addr)
         
         if len(self.fragment_buffers[seq_num]) == total_fragments:

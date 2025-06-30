@@ -4,7 +4,7 @@ import threading
 from lossy_channel import lossy
 from protocol import Frame
 
-TIMEOUT = 1.0  # 1s, ACK timeout for retransmission
+TIMEOUT = 0.00001  # ACK timeout for retransmission
 MAX_RETRY = 10  # Global retry limit
 
 class client:
@@ -30,39 +30,35 @@ class client:
         """Send fragmented message"""
         frames = Frame.create_fragmented_frames(self.seq_num, message)
         total_fragments = len(frames)
-        
         print(f"Sending fragmented message: {len(message)} bytes, {total_fragments} fragments")
-        
-        for i, frame in enumerate(frames):
-            retries = 0
-            
-            while retries < MAX_RETRY:
-                try:
-                    lossy_frame = lossy(frame)
+        pending_fragments = set(range(total_fragments))
+        retries = {i: 0 for i in pending_fragments}
+        while pending_fragments and max(retries.values()) < MAX_RETRY:
+            # Send all unconfirmed fragments
+            for i in list(pending_fragments):
+                if retries[i] < MAX_RETRY:
+                    lossy_frame = lossy(frames[i])
                     self.c.sendto(lossy_frame, server)
                     print(f"Sent fragment {i+1}/{total_fragments} with seq={self.seq_num}")
-                    
-                    try:
-                        ack_frame, addr = self.c.recvfrom(1024)
-                        ack_seq, ack_data, _, _ = Frame.check_frame(ack_frame)
-                        
-                        if ack_data == b'ACK' and ack_seq == self.seq_num:
-                            print(f"Received ACK for fragment {i+1}/{total_fragments}")
-                            break
-                            
-                    except socket.timeout:
-                        print(f"Timeout for fragment {i+1}, retrying... ({retries + 1})")
-                        retries += 1
-                        continue
-                        
-                except Exception as e:
-                    print(f"Error sending fragment {i+1}: {e}")
-                    retries += 1
-            
-            if retries >= MAX_RETRY:
-                print(f"Failed to send fragment {i+1} after {MAX_RETRY} retries")
-                return False
-        
+                    retries[i] += 1
+            # Wait for ACK, remove confirmed fragment_id
+            try:
+                while True:
+                    ack_frame, addr = self.c.recvfrom(1024)
+                    ack_seq, ack_data, ack_fragment_id, _ = Frame.check_frame(ack_frame)
+                    if ack_data[:3] == b'ACK' and ack_seq == self.seq_num:
+                        frag_id = ack_fragment_id
+                        if frag_id in pending_fragments:
+                            print(f"Received ACK for fragment {frag_id+1}/{total_fragments}")
+                            pending_fragments.discard(frag_id)
+                    if not pending_fragments:
+                        break
+            except socket.timeout:
+                print(f"Timeout, retrying pending fragments: {pending_fragments}")
+                continue
+        if pending_fragments:
+            print(f"Failed to send fragments {pending_fragments} after {MAX_RETRY} retries")
+            return False
         self.seq_num = 1 - self.seq_num
         print(f"All {total_fragments} fragments sent successfully")
         return True
@@ -102,9 +98,10 @@ class client:
         """Handle fragmented message"""
         if seq_num not in self.fragment_buffers:
             self.fragment_buffers[seq_num] = {}
-        
         self.fragment_buffers[seq_num][fragment_id] = fragment_data
-        
+        # Send ACK immediately after receiving a fragment, ACK contains fragment_id
+        ack = Frame.create_frame(seq_num, b'ACK', fragment_id, total_fragments)
+        self.c.sendto(ack, addr)
         if len(self.fragment_buffers[seq_num]) == total_fragments:
             complete_message = bytearray()
             for i in range(total_fragments):
@@ -113,16 +110,10 @@ class client:
                 else:
                     print(f"Missing fragment {i} for seq={seq_num}")
                     return
-            
             del self.fragment_buffers[seq_num]
-            
             complete_data = bytes(complete_message)
             print(f"Reassembled fragmented message: {len(complete_data)} bytes")
             print(f"Complete message: {complete_data.decode('ascii', errors='ignore')[:100]}...")
-            
-            ack = Frame.create_frame(seq_num, b'ACK')
-            self.c.sendto(ack, addr)
-            
             if seq_num == self.expected_seq:
                 self.expected_seq = 1 - self.expected_seq
 

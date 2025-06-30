@@ -1,12 +1,3 @@
-#!/usr/bin/env python3
-"""
-Protocol Evaluation Script
-Evaluates the custom UDP protocol for:
-- Latency: Measure the delay introduced by the protocol
-- Bandwidth: Determine the additional data overhead caused by the protocol
-- Limitations: Identify where the protocol fails or becomes inefficient
-"""
-
 import time
 import statistics
 import random

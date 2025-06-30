@@ -5,7 +5,7 @@ from utils.crc import calc_crc
 class Frame:
     """Create the frame from string data"""
     # Fragment size constant (bytes)
-    FRAGMENT_SIZE = 16
+    FRAGMENT_SIZE = 128
 
     @staticmethod
     def create_frame(seq_num, data, fragment_id=0, total_fragments=1):
